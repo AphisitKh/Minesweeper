@@ -5,7 +5,7 @@ import System.Random
 import Test.QuickCheck
 import Test.QuickCheck.Gen
 
-data State = Opened | Closed | Flagged
+data State = Opened | Closed | Marked
                 deriving (Eq, Show)
 
 data Value = Numeric Int | Bomb
@@ -17,7 +17,7 @@ data Cell = Cell { state :: State, value :: Value }
 data GameField = GameField { rows :: [[Cell]] }
                 deriving (Eq, Show)
 
-data Action = Click | Flag | Invalid
+data Action = Click | Mark | Invalid
                 deriving (Eq, Show)
 
 type Pos = (Int, Int)
@@ -25,7 +25,7 @@ type Pos = (Int, Int)
 
 data Interface = Interface 
     {   iNewGame    :: Int -> Int -> Int -> StdGen -> GameField 
-    ,   iFlagCell   :: GameField -> Pos -> GameField
+    ,   iMarkCell   :: GameField -> Pos -> GameField
     ,   iClickCell  :: GameField -> Pos -> GameField
     ,   iHasWon     :: GameField -> Bool
     ,   iGameOver   :: GameField -> Bool
@@ -33,10 +33,10 @@ data Interface = Interface
 
 runGame :: Interface -> IO ()
 runGame i = do
-  putStrLn "Welcome to Mine Sweeper."
-  putStrLn "Enter width of the game field"
+  putStrLn "MineSweeper Functional Programming Project"
+  putStrLn "Enter column of the game"
   x <- getLine 
-  putStrLn "Enter height of the game field"
+  putStrLn "Enter row of the game"
   y <- getLine
   putStrLn "Enter number of bombs"
   bombs <- getLine
@@ -52,14 +52,14 @@ gameLoop i gameField = do
     if (iGameOver i gameField) || (iHasWon i gameField) then do
         finish i (iHasWon i gameField)
     else do
-        putStrLn "Click [C] or Flag [F] a position, [C y x] or [F y x]"
+        putStrLn "Click [C] or Mark [M] a position, [C y x] or [M y x]"
         inputLine <- getLine
         let (action, pos) = parseInput inputLine
         if (isValidInput action pos gameField) then do 
             if action == Click then do
                 gameLoop i (iClickCell i gameField pos)
             else do
-                gameLoop i (iFlagCell i gameField pos)
+                gameLoop i (iMarkCell i gameField pos)
         else do
             putStrLn ("Invalid input")
             gameLoop i gameField
@@ -74,8 +74,8 @@ isValidInput _ (y, x) (GameField rows)  = not (y < 0 || y >= yMax || x < 0 || x 
 parseInput :: String -> (Action, Pos)
 parseInput s = 
     if valid then
-        if head inputs == "F" then
-            (Flag, pos)
+        if head inputs == "M" then
+            (Mark, pos)
         else if head inputs == "C" then
             (Click, pos)
         else
@@ -103,7 +103,7 @@ printField (GameField rows) = do
 
 cellToChar :: Cell -> Char
 cellToChar (Cell Closed _)              = '.'
-cellToChar (Cell Flagged _)             = 'P'
+cellToChar (Cell Marked _)             = '@'
 cellToChar (Cell Opened (Numeric 0))    = ' ' 
 cellToChar (Cell _ (Numeric n))         = intToDigit n
 cellToChar _                            = '+'  
@@ -202,28 +202,28 @@ nRandPos gen n list (maxY, maxX) =
         (x, gen'') = randomR (0, maxX) gen'
 
 -- Flags a cell with the given position
-flagCell :: GameField -> Pos -> GameField
-flagCell (GameField rows) (y,x) = 
+markCell :: GameField -> Pos -> GameField
+markCell (GameField rows) (y,x) = 
     if isOpened (rows !! y !! x) then
         (GameField rows)
-    else if isFlagged (rows !! y !! x) then
+    else if isMarked (rows !! y !! x) then
         GameField (rows !!= (y, rows !! y !!= (x, (Cell Closed v))))
     else
-        GameField (rows !!= (y, rows !! y !!= (x, (Cell Flagged v))))
+        GameField (rows !!= (y, rows !! y !!= (x, (Cell Marked v))))
     where
         (Cell _ v) = rows !! y !! x
 
-prop_flagCell :: GameField -> Pos -> Property
-prop_flagCell (GameField rows) (y,x) = not (isOpened (Cell s v)) ==>
-        if isFlagged (Cell s v) then
+prop_markCell :: GameField -> Pos -> Property
+prop_markCell (GameField rows) (y,x) = not (isOpened (Cell s v)) ==>
+        if isMarked (Cell s v) then
             s' == Closed
         else
-            s' == Flagged
+            s' == Marked
     where 
         y' = y `mod` (length rows)
         x' = x `mod` (length (rows !! y'))
         (Cell s v) = rows !! y' !! x'
-        (GameField rows') = flagCell (GameField rows) (y',x')
+        (GameField rows') = markCell (GameField rows) (y',x')
         (Cell s' v') = rows' !! y' !! x'
 
 -- Updates a list at the given index with the given value
@@ -247,18 +247,18 @@ isOpened :: Cell -> Bool
 isOpened (Cell Opened _)    = True
 isOpened _                  = False
 
-isFlagged :: Cell -> Bool
-isFlagged (Cell Flagged _)  = True
-isFlagged _                 = False
+isMarked :: Cell -> Bool
+isMarked (Cell Marked _)  = True
+isMarked _                 = False
 
 isEmptyCell :: Cell -> Bool
 isEmptyCell (Cell _ (Numeric 0)) = True
 isEmptyCell _                    = False 
 
--- Opens a cell at a given position if it isn't flagged.
+-- Opens a cell at a given position if it isn't Marked.
 clickCell :: GameField -> Pos -> GameField
 clickCell (GameField rows) (y,x) =
-    if (isOpened (Cell state v) || isFlagged (Cell state v)) then 
+    if (isOpened (Cell state v) || isMarked (Cell state v)) then 
         (GameField rows)
     else 
         if (isEmptyCell (Cell state v)) then
@@ -298,7 +298,7 @@ calcOffsetPos (GameField rows) (y,x) =
 -- Checks if all cells but those containing bombs are open
 hasWon :: GameField -> Bool
 hasWon (GameField rows) = 
-    and [((state == Closed || state == Flagged) && value == Bomb) || 
+    and [((state == Closed || state == Marked) && value == Bomb) || 
             (state == Opened && value /= Bomb)  
         | row <-rows, (Cell state value) <- row] 
 
@@ -309,11 +309,11 @@ gameOver (GameField rows) = or [ state == Opened && value == Bomb
 
 implementation = Interface 
     {   iNewGame    = newGame
-    ,   iFlagCell   = flagCell
+    ,   iMarkCell   = markCell
     ,   iClickCell  = clickCell
     ,   iHasWon     = hasWon
     ,   iGameOver   = gameOver
     }
 
-main :: IO ()
-main = runGame implementation
+start :: IO ()
+start = runGame implementation
