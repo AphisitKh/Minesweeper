@@ -3,7 +3,7 @@ import Data.Char
 import Data.List.Split
 import System.Random
 import Test.QuickCheck
-import Test.QuickCheck.Gen
+-- import Test.QuickCheck.Gen
 
 data State = Opened | Closed | Marked
                 deriving (Eq, Show)
