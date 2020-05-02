@@ -27,7 +27,7 @@ data Interface = Interface
     {   iNewGame    :: Int -> Int -> Int -> StdGen -> GameField 
     ,   iMarkCell   :: GameField -> Pos -> GameField
     ,   iCheckCell  :: GameField -> Pos -> GameField
-    ,   iWinCheck     :: GameField -> Bool
+    ,   iWinCheck   :: GameField -> Bool
     ,   iGameOver   :: GameField -> Bool
     }
 
@@ -57,8 +57,9 @@ loopGame i gameField = do
     else do
         putStrLn "\nCheck [C] or Mark [M] a position, ex :  [ C row col ] or [M row col]"
         inputLine <- getLine
-        let (action, pos) = parseInput inputLine
+        let (action, pos) = changeInput inputLine
         if (validInput action pos gameField) then do 
+
             if action == Check then do
                 loopGame i (iCheckCell i gameField pos)
             else do
@@ -74,8 +75,8 @@ validInput _ (y, x) (GameField rows)  = not (y < 0 || y >= yMax || x < 0 || x >=
         yMax = length rows
         xMax = length (rows !! 0)
 
-parseInput :: String -> (Action, Pos)
-parseInput s = 
+changeInput :: String -> (Action, Pos)
+changeInput s = 
     if valid then
         if head inputs == "M" then
             (Mark, pos)
