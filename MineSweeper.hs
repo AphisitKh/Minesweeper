@@ -27,7 +27,7 @@ data Interface = Interface
     {   iNewGame    :: Int -> Int -> Int -> StdGen -> GameField 
     ,   iMarkCell   :: GameField -> Pos -> GameField
     ,   iCheckCell  :: GameField -> Pos -> GameField
-    ,   iHasWon     :: GameField -> Bool
+    ,   iWinCheck     :: GameField -> Bool
     ,   iGameOver   :: GameField -> Bool
     }
 
@@ -43,29 +43,29 @@ runGame i = do
     putStrLn "Enter number of bombs"
     bombs <- getLine
     putStrLn "----------------------------------------------\n"
-    let xint = read x :: Int
-    let yint = read y :: Int
-    let nbrBombs = read bombs :: Int
+    let column = read x :: Int
+    let row = read y :: Int
+    let totalBomb = read bombs :: Int
     g <- newStdGen
-    gameLoop i (iNewGame i xint yint nbrBombs g)
+    loopGame i (iNewGame i column row totalBomb g)
 
-gameLoop :: Interface -> GameField -> IO ()
-gameLoop i gameField = do
+loopGame :: Interface -> GameField -> IO ()
+loopGame i gameField = do
     printField gameField
-    if (iGameOver i gameField) || (iHasWon i gameField) then do
-        finish i (iHasWon i gameField)
+    if (iGameOver i gameField) || (iWinCheck i gameField) then do
+        finish i (iWinCheck i gameField)
     else do
-        putStrLn "\nCheck [C] or Mark [M] a position, [ C row col ] or [M row col]"
+        putStrLn "\nCheck [C] or Mark [M] a position, ex :  [ C row col ] or [M row col]"
         inputLine <- getLine
         let (action, pos) = parseInput inputLine
         if (isValidInput action pos gameField) then do 
             if action == Check then do
-                gameLoop i (iCheckCell i gameField pos)
+                loopGame i (iCheckCell i gameField pos)
             else do
-                gameLoop i (iMarkCell i gameField pos)
+                loopGame i (iMarkCell i gameField pos)
         else do
             putStrLn ("\n\n*************Invalid input*************\n\n")
-            gameLoop i gameField
+            loopGame i gameField
 
 isValidInput :: Action -> Pos -> GameField -> Bool
 isValidInput Invalid _ _                = False
@@ -94,7 +94,7 @@ finish :: Interface -> Bool -> IO ()
 finish i didWin = do
     if didWin 
         then 
-            putStrLn ("YOU WON")
+            putStrLn ("YOU WIN !!!!!!!!")
         else
             putStrLn("YOU LOST")
 
@@ -287,8 +287,8 @@ calcOffsetPos (GameField rows) (y,x) =
             xMax = length $ rows !! 0 
 
 -- Checks if all cells but those containing bombs are open
-hasWon :: GameField -> Bool
-hasWon (GameField rows) = 
+winCheck :: GameField -> Bool
+winCheck (GameField rows) = 
     and [((state == Closed || state == Marked) && value == Bomb) || 
             (state == Opened && value /= Bomb)  
         | row <-rows, (Cell state value) <- row] 
@@ -302,7 +302,7 @@ getStart = Interface
     {   iNewGame    = newGame
     ,   iMarkCell   = markCell
     ,   iCheckCell  = checkCell
-    ,   iHasWon     = hasWon
+    ,   iWinCheck     = winCheck
     ,   iGameOver   = gameOver
     }
 
