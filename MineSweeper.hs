@@ -17,7 +17,7 @@ data Cell = Cell { state :: State, value :: Value }
 data GameField = GameField { rows :: [[Cell]] }
                 deriving (Eq, Show)
 
-data Action = Click | Mark | Invalid
+data Action = Check | Mark | Invalid
                 deriving (Eq, Show)
 
 type Pos = (Int, Int)
@@ -26,25 +26,28 @@ type Pos = (Int, Int)
 data Interface = Interface 
     {   iNewGame    :: Int -> Int -> Int -> StdGen -> GameField 
     ,   iMarkCell   :: GameField -> Pos -> GameField
-    ,   iClickCell  :: GameField -> Pos -> GameField
+    ,   iCheckCell  :: GameField -> Pos -> GameField
     ,   iHasWon     :: GameField -> Bool
     ,   iGameOver   :: GameField -> Bool
     }
 
 runGame :: Interface -> IO ()
 runGame i = do
-  putStrLn "MineSweeper Functional Programming Project"
-  putStrLn "Enter column of the game"
-  x <- getLine 
-  putStrLn "Enter row of the game"
-  y <- getLine
-  putStrLn "Enter number of bombs"
-  bombs <- getLine
-  let xint = read x :: Int
-  let yint = read y :: Int
-  let nbrBombs = read bombs :: Int
-  g <- newStdGen
-  gameLoop i (iNewGame i xint yint nbrBombs g)
+    putStrLn "\n\n\n----------------------------------------------"
+    putStrLn "MineSweeper Functional Programming Project"
+    putStrLn "----------------------------------------------"
+    putStrLn "\nEnter column of the game"
+    x <- getLine 
+    putStrLn "Enter row of the game"
+    y <- getLine
+    putStrLn "Enter number of bombs"
+    bombs <- getLine
+    putStrLn "----------------------------------------------\n"
+    let xint = read x :: Int
+    let yint = read y :: Int
+    let nbrBombs = read bombs :: Int
+    g <- newStdGen
+    gameLoop i (iNewGame i xint yint nbrBombs g)
 
 gameLoop :: Interface -> GameField -> IO ()
 gameLoop i gameField = do
@@ -52,16 +55,16 @@ gameLoop i gameField = do
     if (iGameOver i gameField) || (iHasWon i gameField) then do
         finish i (iHasWon i gameField)
     else do
-        putStrLn "Click [C] or Mark [M] a position, [C y x] or [M y x]"
+        putStrLn "\nCheck [C] or Mark [M] a position, [ C row col ] or [M row col]"
         inputLine <- getLine
         let (action, pos) = parseInput inputLine
         if (isValidInput action pos gameField) then do 
-            if action == Click then do
-                gameLoop i (iClickCell i gameField pos)
+            if action == Check then do
+                gameLoop i (iCheckCell i gameField pos)
             else do
                 gameLoop i (iMarkCell i gameField pos)
         else do
-            putStrLn ("Invalid input")
+            putStrLn ("\n\n*************Invalid input*************\n\n")
             gameLoop i gameField
 
 isValidInput :: Action -> Pos -> GameField -> Bool
@@ -77,7 +80,7 @@ parseInput s =
         if head inputs == "M" then
             (Mark, pos)
         else if head inputs == "C" then
-            (Click, pos)
+            (Check, pos)
         else
             (Invalid, pos)
     else
@@ -120,18 +123,6 @@ digs' :: Int -> [Char]
 digs' 0 = []
 digs' x = digs' (x `div` 10) ++ [intToDigit (x `mod` 10)]    
 
--- Just an example game field.
-example = GameField [
-    [ec, ec, ec, ec, ec], 
-    [e1, e1, e1, ec, ec],
-    [e1, bo, e2, e1, ec],
-    [e1, e2, bo, e1, ec],
-    [ec, e1, e1, e1, ec]]
-    where 
-        ec = Cell Closed (Numeric 0)
-        e1 = Cell Closed (Numeric 1)
-        e2 = Cell Closed (Numeric 2)
-        bo = Cell Closed Bomb
 
 posOffset = [(-1,-1), (-1,0), (-1,1),
              (0, -1),         ( 0,1),
@@ -256,35 +247,35 @@ isEmptyCell (Cell _ (Numeric 0)) = True
 isEmptyCell _                    = False 
 
 -- Opens a cell at a given position if it isn't Marked.
-clickCell :: GameField -> Pos -> GameField
-clickCell (GameField rows) (y,x) =
+checkCell :: GameField -> Pos -> GameField
+checkCell (GameField rows) (y,x) =
     if (isOpened (Cell state v) || isMarked (Cell state v)) then 
         (GameField rows)
     else 
         if (isEmptyCell (Cell state v)) then
             -- Recursively open neigboring cells if this cell is completely empty
-            clickCell' clickedGf (calcOffsetPos clickedGf (y,x))
+            checkCell' checkedGf (calcOffsetPos checkedGf (y,x))
         else
-            clickedGf
+            checkedGf
     where 
-        clickedGf       = (GameField (rows !!= (y, rows !! y !!= (x, (Cell Opened v)))))
+        checkedGf       = (GameField (rows !!= (y, rows !! y !!= (x, (Cell Opened v)))))
         (Cell state v) = rows !! y !! x
 
-clickCell' :: GameField -> [Pos] -> GameField
-clickCell' gf [pos]         = clickCell gf pos
-clickCell' gf (pos:posxs)   = clickCell' gf' posxs
+checkCell' :: GameField -> [Pos] -> GameField
+checkCell' gf [pos]         = checkCell gf pos
+checkCell' gf (pos:posxs)   = checkCell' gf' posxs
     where
-        gf' = clickCell gf pos
+        gf' = checkCell gf pos
 
-prop_clickCell :: GameField -> Pos -> Property
-prop_clickCell (GameField rows) (y,x) = 
+prop_checkCell :: GameField -> Pos -> Property
+prop_checkCell (GameField rows) (y,x) = 
     not (isOpened (Cell s v)) && not (isEmptyCell (Cell s v)) ==>
         s' == Opened && v' == v
     where 
         y' = y `mod` (length rows)
         x' = x `mod` (length (rows !! y'))
         (Cell s v) = rows !! y' !! x'
-        (GameField rows') = clickCell (GameField rows) (y',x')
+        (GameField rows') = checkCell (GameField rows) (y',x')
         (Cell s' v') = rows' !! y' !! x'
 
 -- Calculates all surrounding positions of a given coordinate
@@ -307,13 +298,13 @@ gameOver :: GameField -> Bool
 gameOver (GameField rows) = or [ state == Opened && value == Bomb 
     | row <- rows, (Cell state value) <- row]
 
-implementation = Interface 
+getStart = Interface 
     {   iNewGame    = newGame
     ,   iMarkCell   = markCell
-    ,   iClickCell  = clickCell
+    ,   iCheckCell  = checkCell
     ,   iHasWon     = hasWon
     ,   iGameOver   = gameOver
     }
 
 start :: IO ()
-start = runGame implementation
+start = runGame getStart
