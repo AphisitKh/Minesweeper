@@ -5,6 +5,12 @@ import System.Random
 import Test.QuickCheck
 import Test.QuickCheck.Gen
 
+import Control.Monad
+
+import System.IO
+import System.Console.ANSI
+import Foreign.C
+
 data State = Opened | Closed | Marked
                 deriving (Eq, Show)
 
@@ -47,26 +53,27 @@ runGame i = do
     let row = read y :: Int
     let totalBomb = read bombs :: Int
     g <- newStdGen
-    loopGame i (iNewGame i column row totalBomb g)
+    loopGame i (iNewGame i column row totalBomb g) (0,0)
 
-loopGame :: Interface -> GameField -> IO ()
-loopGame i gameField = do
+loopGame :: Interface -> GameField -> Pos -> IO ()
+loopGame i gameField currPos = do
     printField gameField
     if (iGameOver i gameField) || (iWinCheck i gameField) then do
         finish i (iWinCheck i gameField)
     else do
-        putStrLn "\nCheck [C] or Mark [M] a position, ex :  [ C row col ] or [M row col]"
-        inputLine <- getLine
-        let (action, pos) = changeInput inputLine
-        if (validInput action pos gameField) then do 
+        waitForKey i gameField currPos
+        -- putStrLn "\nCheck [C] or Mark [M] a position, ex :  [ C row col ] or [M row col]"
+        -- inputLine <- getLine
+        -- let (action, pos) = changeInput inputLine
+        -- if (validInput action pos gameField) then do 
 
-            if action == Check then do
-                loopGame i (iCheckCell i gameField pos)
-            else do
-                loopGame i (iMarkCell i gameField pos)
-        else do
-            putStrLn ("\n\n*************Invalid input*************\n\n")
-            loopGame i gameField
+        --     if action == Check then do
+        --         loopGame i (iCheckCell i gameField pos)
+        --     else do
+        --         loopGame i (iMarkCell i gameField pos)
+        -- else do
+        --     putStrLn ("\n\n*************Invalid input*************\n\n")
+        --     loopGame i gameField
 
 validInput :: Action -> Pos -> GameField -> Bool
 validInput Invalid _ _                = False
@@ -91,19 +98,71 @@ changeInput s =
         valid = length inputs == 3
         pos = (read (inputs !! 1) :: Int, read (inputs !! 2) :: Int)
 
+getCh :: IO Char
+getCh = liftM (chr . fromEnum) c_getch
+foreign import ccall unsafe "conio.h _getch" c_getch :: IO CInt        
+
+waitForKey i gameField (nowX, nowY) = do
+  hSetEcho stdin False
+  let rowNum = (length (rows gameField))-1
+  cursorUp (1+rowNum-nowX)
+  cursorForward (5+(3*nowY))
+  waitForKey' (nowX,nowY)
+  hSetEcho stdin True
+  setSGR [Reset]
+  where
+    waitForKey' (x, y) = do
+      key <- getCh
+      case key of
+        'w' -> cursorUp 1 >> waitForKey'(x-1,y)
+        's' -> cursorDown 1 >> waitForKey'(x+1,y)
+        'a' -> cursorBackward 3 >> waitForKey'(x,y-1)
+        'd' -> cursorForward 3 >> waitForKey'(x,y+1)
+        'c' -> newInput ("C " ++ show x ++ " " ++ show y)
+        'm' -> newInput ("M " ++ show x ++ " " ++ show y)
+        _ -> waitForKey' (x, y)
+
+      where
+        newInput inputLine = do
+          let (action, pos) = changeInput inputLine
+          if (validInput action pos gameField) then do 
+              if action == Check then do
+                  loopGame i (iCheckCell i gameField pos) (x,y)
+              else do
+                  loopGame i (iMarkCell i gameField pos) (x,y)
+          else do
+              putStrLn ("Invalid input")
+              loopGame i gameField (x,y)        
+
 finish :: Interface -> Bool -> IO ()
 finish i didWin = do
     if didWin 
-        then 
-            putStrLn ("YOU WIN !!!!!!!!")
-        else
-            putStrLn("YOU LOST")
+        then do
+            setSGR [SetColor Foreground Dull Green]
+            putStrLn ("\nYOU WIN !!!!!!!!")
+        else do
+            setSGR [SetColor Foreground Dull Red]
+            putStrLn("\nYOU LOST !!!!!!!!")
 
 printField :: GameField -> IO ()
 printField (GameField rows) = do
+        clearScreen
+        setSGR [SetColor Foreground Vivid Red]
+        putStrLn "\n WASD - control cursor, C - Check, M - Mark\n"
+        setSGR [SetColor Foreground Dull Blue]
         putStrLn ( foldl (++) "    " [showNum i ++ " " | (i, _) <- zip [0..] (rows !! 0)])   
-        putStrLn ( foldl (++) "    " ["___" | _ <- (rows !! 0)])   
-        putStrLn (unlines [ foldl (++) ((showNum rowNum) ++ [' ', '|', ' ']) [[cellType c] ++ "  " | c <- row ] | (rowNum, row) <- zip [0..] rows] )
+        putStrLn ( foldl (++) "    " ["___" | _ <- (rows !! 0)])
+        let row = zip [0..] rows
+        mapM (\(rowNum, row) -> 
+          setSGR [SetColor Foreground Dull Blue] >>
+          putStr ((showNum rowNum) ++ [' ', '|', ' ']) >>
+          setSGR [SetColor Foreground Dull Yellow] >>
+          mapM (\c -> putStr ([cellType c] ++ "  ")) row >>
+          putStrLn "") row 
+        setSGR [Reset]
+        -- putStrLn ( foldl (++) "    " [showNum i ++ " " | (i, _) <- zip [0..] (rows !! 0)])   
+        -- putStrLn ( foldl (++) "    " ["___" | _ <- (rows !! 0)])   
+        -- putStrLn (unlines [ foldl (++) ((showNum rowNum) ++ [' ', '|', ' ']) [[cellType c] ++ "  " | c <- row ] | (rowNum, row) <- zip [0..] rows] )
 
 cellType :: Cell -> Char
 cellType (Cell Closed _)              = '.'
