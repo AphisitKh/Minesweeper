@@ -58,7 +58,8 @@ loopGame i gameField = do
         putStrLn "\nCheck [C] or Mark [M] a position, ex :  [ C row col ] or [M row col]"
         inputLine <- getLine
         let (action, pos) = changeInput inputLine
-        if (isValidInput action pos gameField) then do 
+        if (validInput action pos gameField) then do 
+
             if action == Check then do
                 loopGame i (iCheckCell i gameField pos)
             else do
@@ -67,9 +68,9 @@ loopGame i gameField = do
             putStrLn ("\n\n*************Invalid input*************\n\n")
             loopGame i gameField
 
-isValidInput :: Action -> Pos -> GameField -> Bool
-isValidInput Invalid _ _                = False
-isValidInput _ (y, x) (GameField rows)  = not (y < 0 || y >= yMax || x < 0 || x >= xMax)
+validInput :: Action -> Pos -> GameField -> Bool
+validInput Invalid _ _                = False
+validInput _ (y, x) (GameField rows)  = not (y < 0 || y >= yMax || x < 0 || x >= xMax)
     where 
         yMax = length rows
         xMax = length (rows !! 0)
@@ -100,33 +101,33 @@ finish i didWin = do
 
 printField :: GameField -> IO ()
 printField (GameField rows) = do
-        putStrLn ( foldl (++) "    " [digs i ++ " " | (i, _) <- zip [0..] (rows !! 0)])   
+        putStrLn ( foldl (++) "    " [showNum i ++ " " | (i, _) <- zip [0..] (rows !! 0)])   
         putStrLn ( foldl (++) "    " ["___" | _ <- (rows !! 0)])   
-        putStrLn (unlines [ foldl (++) ((digs rowNum) ++ [' ', '|', ' ']) [[cellToChar c] ++ "  " | c <- row ] | (rowNum, row) <- zip [0..] rows] )
+        putStrLn (unlines [ foldl (++) ((showNum rowNum) ++ [' ', '|', ' ']) [[cellType c] ++ "  " | c <- row ] | (rowNum, row) <- zip [0..] rows] )
 
-cellToChar :: Cell -> Char
-cellToChar (Cell Closed _)              = '.'
-cellToChar (Cell Marked _)             = '@'
-cellToChar (Cell Opened (Numeric 0))    = ' ' 
-cellToChar (Cell _ (Numeric n))         = intToDigit n
-cellToChar _                            = '+'  
+cellType :: Cell -> Char
+cellType (Cell Closed _)              = '.'
+cellType (Cell Marked _)              = 'X'
+cellType (Cell Opened (Numeric 0))    = ' ' 
+cellType (Cell _ (Numeric n))         = intToDigit n
+cellType _                            = '@'  
 
-digs :: Int -> [Char]
-digs 0 = ['0', '0']
-digs x = 
+showNum :: Int -> [Char]
+showNum 0 = ['0', '0']
+showNum x = 
     if x < 10 then 
-        ['0'] ++ digs' x
+        ['0'] ++ showNum' x
     else
-        digs' x
+        showNum' x
 
-digs' :: Int -> [Char]
-digs' 0 = []
-digs' x = digs' (x `div` 10) ++ [intToDigit (x `mod` 10)]    
+showNum' :: Int -> [Char]
+showNum' 0 = []
+showNum' x = showNum' (x `div` 10) ++ [intToDigit (x `mod` 10)]    
 
 
-posOffset = [(-1,-1), (-1,0), (-1,1),
-             (0, -1),         ( 0,1),
-             (1, -1), ( 1,0), ( 1,1)]
+setPosNbr = [(-1,-1), (-1,0), (-1,1),
+            (0, -1),         ( 0,1),
+            (1, -1), ( 1,0), ( 1,1)]
 
 -- Instance for an arbitrary game field
 instance Arbitrary GameField where 
@@ -160,7 +161,7 @@ addNumerics :: GameField -> [Pos] -> GameField
 addNumerics gF []                           = gF
 addNumerics (GameField rows) (pos:postail)  = addNumerics gF postail
     where
-        gF = addNumerics' (GameField rows) $ calcOffsetPos (GameField rows) pos
+        gF = addNumerics' (GameField rows) $ calcPosNbr (GameField rows) pos
 
 addNumerics' :: GameField -> [Pos] -> GameField
 addNumerics' gF [] = gF
@@ -254,7 +255,7 @@ checkCell (GameField rows) (y,x) =
     else 
         if (isEmptyCell (Cell state v)) then
             -- Recursively open neigboring cells if this cell is completely empty
-            checkCell' checkedGf (calcOffsetPos checkedGf (y,x))
+            checkCell' checkedGf (calcPosNbr checkedGf (y,x))
         else
             checkedGf
     where 
@@ -279,9 +280,9 @@ prop_checkCell (GameField rows) (y,x) =
         (Cell s' v') = rows' !! y' !! x'
 
 -- Calculates all surrounding positions of a given coordinate
-calcOffsetPos :: GameField -> Pos -> [Pos]
-calcOffsetPos (GameField rows) (y,x) = 
-    [(y'',x'') | (y',x') <- posOffset, let y'' = y+y', let x'' = x+x', y'' >= 0, y'' < yMax, x'' >= 0, x'' < xMax]
+calcPosNbr :: GameField -> Pos -> [Pos]
+calcPosNbr (GameField rows) (y,x) = 
+    [(y'',x'') | (y',x') <- setPosNbr, let y'' = y+y', let x'' = x+x', y'' >= 0, y'' < yMax, x'' >= 0, x'' < xMax]
         where 
             yMax = length rows
             xMax = length $ rows !! 0 
